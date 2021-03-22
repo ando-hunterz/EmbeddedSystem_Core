@@ -43,7 +43,6 @@ void RFID_SETUP(){
  * Check the RFID is RFID is present, and is new card is present or not
  */
 bool check_RFID(){
-  Serial.println("Checking If RFID Present");
   if ( ! mfrc522.PICC_IsNewCardPresent()) {
     return 0;
   }
@@ -161,14 +160,24 @@ int POST_API (String uid, float temp, String user_status) {
   Serial.print(user_status);
   int httpResponseCode = http.POST("{\"uid\": \""+uid+"\",\"temperature\": \""+temp+"\",\"status\": \""+user_status+"\"}");
   Serial.print(httpResponseCode);
+  if(httpResponseCode == 200) Serial.println("Api POST OK, Response is 200");
+  if(httpResponseCode == 400) Serial.println("Api POST OK, Status not OK, Response is 400");
+  if(httpResponseCode != 200 || httpResponseCode != 400) Serial.println("API POST IS NOT OK, CHECK IP OR SERVER");
   return httpResponseCode;
-       
 }
 
 void warningDetect(){
-  
+  //TODO
+  Serial.println("WARNING IS CALLED");
 }
 
+void dispenseLiquid(){
+  Serial.println("MOVE SERVO TO 90 DEGREE");
+  servo.write(90);
+  delay(1500);
+  Serial.println("MOVE SERVO TO POSITION");
+  servo.write(0);
+}
 void setup() {
   // Setup Wifi Manager For using wifi
   Serial.begin(9600);
@@ -180,33 +189,45 @@ void setup() {
     } 
     else {
         //if you get here you have connected to the WiFi    
-        Serial.println("connected...yeey :)");
+        Serial.println("Connected:)");
     }
    // Setup the RFID
+     Serial.println("SETUP THE RFID");
      RFID_SETUP();
+     Serial.println("SETUP THE SERVO");
      servo.attach(SERVO_PIN);
 }
 
 void loop() {
-//  bool RFID_check = check_RFID();
-//  while(RFID_check == 0){
-//    RFID_check = check_RFID();
-//    delay(0);
-//  }
-//  String RFID_UID = read_RFID();
+  Serial.println("CHECK FOR RFID DATA");
+  bool RFID_check = check_RFID();
+  while(RFID_check == 0){
+    RFID_check = check_RFID();
+    delay(0);
+  }
+  String RFID_UID = read_RFID();
+  Serial.println("RFID DATA IN, CONTINUE TO READ TEMP");
   float temp = 0;
+  Serial.println("READ TEMPERATURE START");
   while(temp == 0){
     temp = read_temperature();
     delay(0);
   }
+  Serial.println("TEMPERATURE READ IS OK, TEMPERATURE IS OK");
+  Serial.println("CHECK FOR USER STATUS");
   String user_status = get_status(temp);
-  // int respondCode = POST_API(RFID_UID,temp,user_status);
+  Serial.println("STATUS IS OK, BEGIN API POST");
+  int respondCode = POST_API(RFID_UID,temp,user_status);
+  if(respondCode == 400){
+    warningDetect();
+  }
+  Serial.println("RESPONSE IS OK, CHECKING MOTION");
   int isMotion = check_motion();
   while(isMotion == 0){
     isMotion = check_motion();
     delay(0);
   }
-  servo.write(90);
-  delay(1500);
-  servo.write(0);
+  Serial.println("MOTION IS OK, READY TO DISPENSE");
+  dispenseLiquid();
+  Serial.println("SEQUENCE FINISHED");
 }
