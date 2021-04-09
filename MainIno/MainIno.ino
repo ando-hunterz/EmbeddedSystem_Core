@@ -15,7 +15,7 @@
 #define SS_PIN          D4         // Pin for SS RFID pin
 #define TRIG_PIN        D8        // Pin for PIR pin
 #define ECHO_PIN        D7         // Pin for PIR pin
-#define SERVO_PIN       D4          // Pin for Servo PWM pin
+#define SERVO_PIN       D8          // Pin for Servo PWM pin
 
 // Object Define
 MFRC522 mfrc522(SS_PIN, RST_PIN);
@@ -140,7 +140,7 @@ int check_motion(){
   Serial.print(distance);
   Serial.println(" cm");
   if(distance <= 2){
-    showLed("green");
+
     isMotion = 1;
     Serial.println("Motion Detected");
   }
@@ -170,7 +170,6 @@ String get_status(float temp){
  * @return int httpResponseCode
  */
 int POST_API (String uid, float temp, String user_status) {
-  showLed("Red");
   Serial.println("Begin API POST");
   HTTPClient http;
   http.begin("http://192.168.0.14:7070/api/userLog/albertque"); 
@@ -187,6 +186,16 @@ int POST_API (String uid, float temp, String user_status) {
   return httpResponseCode;
 }
 
+
+//Buzzer Module
+
+void showBuzzer(){
+  pinMode(D5, OUTPUT);
+  digitalWrite(D5, HIGH);
+  delay(1000);
+  digitalWrite(D5,LOW);
+}
+
 // LED Module
 /*
  * Show LED based on which mode and which modules is used
@@ -194,12 +203,15 @@ int POST_API (String uid, float temp, String user_status) {
  * @params String Value
  */
 void showLed(String Value){
+  pinMode(D0, OUTPUT);
+  pinMode(D8, OUTPUT);
+  digitalWrite(D0, LOW);
+  digitalWrite(D8, LOW);
   if(Value == "green"){
-    digitalWrite(D5, HIGH);
-    digitalWrite(D6, LOW);
+    digitalWrite(D8, HIGH);
+    showBuzzer();
   } else {
-    digitalWrite(D5, HIGH);
-    digitalWrite(D6, LOW);
+    digitalWrite(D0, HIGH);
    }
     
 }
@@ -210,8 +222,8 @@ void showLed(String Value){
 void warningDetect(){
   Serial.println("WARNING IS CALLED");
   showLed("red");
-  pinMode(D8, OUTPUT);
-  digitalWrite(D8, HIGH);
+  pinMode(D5, OUTPUT);
+  digitalWrite(D5, HIGH);
   delay(60000);
 }
 
@@ -220,6 +232,7 @@ void warningDetect(){
  * Dispense the liquid either soap or hand sanitizing liquid
  */
 void dispenseLiquid(){
+  showLed("green");
   Serial.println("MOVE SERVO TO 90 DEGREE");
   servo.write(90);
   delay(1500);
@@ -243,18 +256,18 @@ void setup() {
    // Setup the RFID
      Serial.println("SETUP THE RFID");
      // Commented while RFID module is being fixed
-//   bool rfidStatus = RFID_SETUP_CHECK();
-//   if(rfidStatus == false) {
-//    Serial.println("RFID SETUP FAILED, CHECK CONNECTION");
-//    while(rfidStatus == false){
-//      rfidStatus = RFID_SETUP();
-//      delay(1000);
-//      Serial.print("rfidStatus: ");
-//      Serial.println(rfidStatus);
-//    }
-//   }
-//   Serial.println("SETUP THE SERVO");
-//   servo.attach(SERVO_PIN);
+   bool rfidStatus = RFID_SETUP_CHECK();
+   if(rfidStatus == false) {
+    Serial.println("RFID SETUP FAILED, CHECK CONNECTION");
+    while(rfidStatus == false){
+      rfidStatus = RFID_SETUP_CHECK();
+      delay(1000);
+      Serial.print("rfidStatus: ");
+      Serial.println(rfidStatus);
+    }
+   }
+   Serial.println("SETUP THE SERVO");
+   servo.attach(SERVO_PIN);
 }
 
 void loop() {
@@ -264,14 +277,15 @@ void loop() {
   unsigned long startMillis = millis(); // Store the current milis
   unsigned long elapsedMillis = 0; // store the elapsed millis
   // Commented while RFID module is being fixed
-// RFID_SETUP();
-//  while(RFID_check == 0){
-//    RFID_check = check_RFID();
-//    delay(0);
-//  }
+  RFID_SETUP();
+  while(RFID_check == 0){
+    RFID_check = check_RFID();
+    delay(0);
+  }
 
   String RFID_UID = read_RFID();
-  
+  showLed("green");
+  delay(1000);
   //String RFID_UID = "BABABCFD";
   Serial.println("RFID DATA IN, CONTINUE TO READ TEMP");
   float temp = 0;
@@ -283,6 +297,7 @@ void loop() {
     elapsedMillis = millis();
     if(elapsedMillis - startMillis >= 30000) return; // if 30s is elapsed and temp is still 0, then return the loop
   }
+  delay(1000);
   Serial.println("TEMPERATURE READ IS OK, TEMPERATURE IS OK");
   Serial.println("CHECK FOR USER STATUS");
   String user_status = get_status(temp);
@@ -292,15 +307,17 @@ void loop() {
     int respondCode = POST_API(RFID_UID,temp,user_status);
     return;
   }
+  showLed("red");
   int respondCode = POST_API(RFID_UID,temp,user_status);
   int tries = 1;
   while(respondCode != 200){
-    if(tries => 6) return; // return to loop is tried is 6 or above 6 
+    if(tries >= 6) return; // return to loop is tried is 6 or above 6 
     respondCode = POST_API(RFID_UID,temp,user_status);
     tries = tries+1;
     delay(0);
   }
   showLed("green");
+  delay(1000);
   Serial.println("RESPONSE IS OK, CHECKING MOTION");
   int isMotion = check_motion();
   startMillis = millis();
@@ -310,6 +327,8 @@ void loop() {
     elapsedMillis = millis();
     if(elapsedMillis - startMillis >= 30000) return;
   }
+  
+  delay(1000);
   Serial.println("MOTION IS OK, READY TO DISPENSE");
   dispenseLiquid();
   Serial.println("SEQUENCE FINISHED");
