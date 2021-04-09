@@ -28,7 +28,7 @@ Adafruit_MLX90614 mlx = Adafruit_MLX90614();
 /**
  * Setup the RFID to work
  */
-bool RFID_SETUP(){
+bool RFID_SETUP_CHECK(){
   Serial.println("Open");
   while (!Serial);    // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
   SPI.begin();      // Init SPI bus
@@ -36,6 +36,7 @@ bool RFID_SETUP(){
   delay(4);       // Optional delay. Some board do need more time after init to be ready, see Readme
   mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
   bool isReady = mfrc522.PCD_PerformSelfTest();
+  SPI.end();
   if(isReady){
     Serial.println("RFID IS READY TO USE");
     return true;
@@ -43,7 +44,12 @@ bool RFID_SETUP(){
     Serial.println("RFID IS NOT READY TO USE, CHECK CONNECTION");
     return false;
   }
-  
+
+}
+
+void RFID_SETUP(){
+  SPI.begin();      // Init SPI bus
+  mfrc522.PCD_Init();   // Init MFRC522
 }
 
 
@@ -51,7 +57,6 @@ bool RFID_SETUP(){
  * Check the RFID is RFID is present, and is new card is present or not
  */
 bool check_RFID(){
-  showLed("RFID","RED");
   if ( ! mfrc522.PICC_IsNewCardPresent()) {
     return 0;
   }
@@ -61,7 +66,6 @@ bool check_RFID(){
     return 0;
   }
   Serial.println("RFID Present");
-  showLed("RFID","GREEN");
   return 1;
 }
 
@@ -70,7 +74,6 @@ bool check_RFID(){
  * @return String of UID value of the card
  */
 String read_RFID(){
-  showLed("RFID","RED");
   Serial.println("Reading RFID UID");
   String userid;
   for (byte i = 0; i < mfrc522.uid.size; i++) {
@@ -79,7 +82,7 @@ String read_RFID(){
   }
   Serial.print("User UID: ");
   Serial.println(userid);
-  showLed("RFID","GREEN");
+  SPI.end();
   return userid;
 }
 
@@ -89,7 +92,7 @@ String read_RFID(){
  * @return float of temperature
  */ 
 float read_temperature(){
-  showLed("nonRFID","RED");
+  showLed("Red");
   Serial.println("Checking Temperature");
   mlx.begin();
   float temp_1 = mlx.readObjectTempC();
@@ -101,11 +104,11 @@ float read_temperature(){
   Serial.println(temp_2);
   if(temp_1 > 34 && temp_2 > 34){
     if(temp_1 - temp_2 <= 0.5 || temp_2 - temp_1 <= 0.5) {
-      showLed("nonRFID","GREEN");
+      showLed("green");
       Serial.println("Temp OK");
       return temp_2;
     } else {
-      showLed("nonRFID","RED");
+      showLed("Red");
       Serial.println("Temp Is not OK");
       return 0;
     }
@@ -116,7 +119,7 @@ float read_temperature(){
 
 //CHECK MOTION
 int check_motion(){
-  showLed("nonRFID","RED");
+  showLed("Red");
   pinMode(TRIG_PIN, OUTPUT); // Sets the trigPin as an OUTPUT
   pinMode(ECHO_PIN, INPUT); // Sets the echoPin as an INPUT
   int distance;
@@ -137,7 +140,7 @@ int check_motion(){
   Serial.print(distance);
   Serial.println(" cm");
   if(distance <= 2){
-    showLed("nonRFID","GREEN");
+    showLed("green");
     isMotion = 1;
     Serial.println("Motion Detected");
   }
@@ -167,7 +170,7 @@ String get_status(float temp){
  * @return int httpResponseCode
  */
 int POST_API (String uid, float temp, String user_status) {
-  showLed("nonRFID","RED");
+  showLed("Red");
   Serial.println("Begin API POST");
   HTTPClient http;
   http.begin("http://192.168.0.14:7070/api/userLog/albertque"); 
@@ -190,33 +193,15 @@ int POST_API (String uid, float temp, String user_status) {
  * @params String Mode
  * @params String Value
  */
-void showLed(String Mode, String Value){
-  int mode;
-  if(Mode == "nonRFID") mode = 1;
-  else mode = 2;
-  switch(mode){
-    case '1':
-      pinMode(D3, OUTPUT);
-      pinMode(D2, OUTPUT); 
-      if(Value == "green"){
-        digitalWrite(D2, HIGH);
-        digitalWrite(D3, LOW);
-      } else {
-        digitalWrite(D3, HIGH);
-        digitalWrite(D2, LOW);
-      }
-      break;
-    case '2':
-      pinMode(D4, OUTPUT);
-      pinMode(D6, OUTPUT); 
-      if(Value == "green"){
-        digitalWrite(D6, HIGH);
-        digitalWrite(D4, LOW);
-      } else {
-        digitalWrite(D4, HIGH);
-        digitalWrite(D6, LOW);
-      }
-  }
+void showLed(String Value){
+  if(Value == "green"){
+    digitalWrite(D5, HIGH);
+    digitalWrite(D6, LOW);
+  } else {
+    digitalWrite(D5, HIGH);
+    digitalWrite(D6, LOW);
+   }
+    
 }
 
 /*
@@ -224,7 +209,7 @@ void showLed(String Mode, String Value){
  */
 void warningDetect(){
   Serial.println("WARNING IS CALLED");
-  showLed("nonRFID","RED");
+  showLed("red");
   pinMode(D8, OUTPUT);
   digitalWrite(D8, HIGH);
   delay(60000);
@@ -258,7 +243,7 @@ void setup() {
    // Setup the RFID
      Serial.println("SETUP THE RFID");
      // Commented while RFID module is being fixed
-//   bool rfidStatus = RFID_SETUP();
+//   bool rfidStatus = RFID_SETUP_CHECK();
 //   if(rfidStatus == false) {
 //    Serial.println("RFID SETUP FAILED, CHECK CONNECTION");
 //    while(rfidStatus == false){
@@ -274,10 +259,12 @@ void setup() {
 
 void loop() {
   Serial.println("CHECK FOR RFID DATA");
+  showLed("Red");
   bool RFID_check = check_RFID();
   unsigned long startMillis = millis(); // Store the current milis
   unsigned long elapsedMillis = 0; // store the elapsed millis
   // Commented while RFID module is being fixed
+// RFID_SETUP();
 //  while(RFID_check == 0){
 //    RFID_check = check_RFID();
 //    delay(0);
@@ -313,7 +300,7 @@ void loop() {
     tries = tries+1;
     delay(0);
   }
-  showLed("nonRFID","GREEN");
+  showLed("green");
   Serial.println("RESPONSE IS OK, CHECKING MOTION");
   int isMotion = check_motion();
   startMillis = millis();
