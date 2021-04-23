@@ -93,16 +93,19 @@ String read_RFID(){
  */ 
 float read_temperature(){
   showLed("Red");
+  float offset = 2;
   Serial.println("Checking Temperature");
   mlx.begin();
   float temp_1 = mlx.readObjectTempC();
+  temp_1 = temp_1 + offset;
   Serial.print("First Temp: ");
   Serial.println(temp_1);
   delay(500);
   float temp_2 = mlx.readObjectTempC();
+  temp_2 = temp_2 + offset;
   Serial.print("Second Temp: ");
   Serial.println(temp_2);
-  if(temp_1 > 34 && temp_2 > 34){
+  if(temp_1 > 35 && temp_2 > 35){
     if(temp_1 - temp_2 <= 0.5 || temp_2 - temp_1 <= 0.5) {
       showLed("green");
       Serial.println("Temp OK");
@@ -118,8 +121,7 @@ float read_temperature(){
 }
 
 //CHECK MOTION
-int check_motion(){
-  showLed("Red");
+int check_motion(unsigned long startMillis){
   pinMode(TRIG_PIN, OUTPUT); // Sets the trigPin as an OUTPUT
   pinMode(ECHO_PIN, INPUT); // Sets the echoPin as an INPUT
   int distance;
@@ -139,10 +141,13 @@ int check_motion(){
   Serial.print("Distance: ");
   Serial.print(distance);
   Serial.println(" cm");
-  if(distance <= 2){
-
-    isMotion = 1;
-    Serial.println("Motion Detected");
+  unsigned long elapsedMillis = millis();
+  if(elapsedMillis - startMillis >= 500){
+    if(distance <= 4){
+  
+      isMotion = 1;
+      Serial.println("Motion Detected");
+    }
   }
   return isMotion;
 }
@@ -172,7 +177,7 @@ String get_status(float temp){
 int POST_API (String uid, float temp, String user_status) {
   Serial.println("Begin API POST");
   HTTPClient http;
-  http.begin("http://192.168.0.14:7070/api/userLog/albertque"); 
+  http.begin("http://192.168.0.10:7070/api/userLog/albertque"); 
   http.addHeader("Content-Type", "application/json");
   Serial.println("UID: "+uid);
   Serial.print("Temp: ");
@@ -231,14 +236,25 @@ void warningDetect(){
 /*
  * Dispense the liquid either soap or hand sanitizing liquid
  */
+ void openRelay(){
+  Serial.println("Open Relay");
+  digitalWrite(D6, LOW);
+  delay(2000);
+}
+
+
 void dispenseLiquid(){
-  showLed("green");
+  delay(1000);
   Serial.println("MOVE SERVO TO 90 DEGREE");
   servo.write(90);
-  delay(1500);
+  delay(2000);
   Serial.println("MOVE SERVO TO POSITION");
-  servo.write(0);
+  servo.write(-90);
+  openRelay();
+  
+  
 }
+
 
 // Main Module
 void setup() {
@@ -268,9 +284,12 @@ void setup() {
    }
    Serial.println("SETUP THE SERVO");
    servo.attach(SERVO_PIN);
+   servo.write(0);
+   
 }
 
 void loop() {
+  
   Serial.println("CHECK FOR RFID DATA");
   showLed("Red");
   bool RFID_check = check_RFID();
@@ -285,6 +304,8 @@ void loop() {
 
   String RFID_UID = read_RFID();
   showLed("green");
+  pinMode(D6, OUTPUT);
+  digitalWrite(D6, HIGH);
   delay(1000);
   //String RFID_UID = "BABABCFD";
   Serial.println("RFID DATA IN, CONTINUE TO READ TEMP");
@@ -295,7 +316,10 @@ void loop() {
     temp = read_temperature();
     delay(0);
     elapsedMillis = millis();
-    if(elapsedMillis - startMillis >= 30000) return; // if 30s is elapsed and temp is still 0, then return the loop
+    if(elapsedMillis - startMillis >= 30000) {
+      showBuzzer();
+      return; // if 30s is elapsed and temp is still 0, then return the loop
+    }
   }
   delay(1000);
   Serial.println("TEMPERATURE READ IS OK, TEMPERATURE IS OK");
@@ -319,16 +343,20 @@ void loop() {
   showLed("green");
   delay(1000);
   Serial.println("RESPONSE IS OK, CHECKING MOTION");
-  int isMotion = check_motion();
+  showLed("red");
   startMillis = millis();
+  int isMotion = check_motion(startMillis);
   while(isMotion == 0){
-    isMotion = check_motion();
+    isMotion = check_motion(startMillis);
     delay(0);
     elapsedMillis = millis();
-    if(elapsedMillis - startMillis >= 30000) return;
+    if(elapsedMillis - startMillis >= 30000) {
+      showBuzzer();
+      return;
+    }
   }
-  
-  delay(1000);
+  showLed("green");
+  delay(1000); 
   Serial.println("MOTION IS OK, READY TO DISPENSE");
   dispenseLiquid();
   Serial.println("SEQUENCE FINISHED");
